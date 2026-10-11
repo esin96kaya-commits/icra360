@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100dvh;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+@media (min-width: 768px) {
+  input,
+  select,
+  textarea,
+  button {
+    font-size: inherit;
+  }
+}
+
+nextjs-portal {
+  display: none !important;
+}

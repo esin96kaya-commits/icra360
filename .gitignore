@@ -1,0 +1,43 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# next
+apps/web/.next
+apps/web/out
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# prisma
+packages/db/src/generated
+
+# logs / debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.turbo
+coverage
+playwright-report
+test-results
+.DS_Store
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# docker volumes (if ever bind-mounted)
+docker/data
+
+# local simulator captures
+apps/web/public/iphone16-*.png
+
+# iOS wrapper build
+apps/ios/build
+apps/ios/DerivedData
+*.xcuserstate
+xcuserdata/

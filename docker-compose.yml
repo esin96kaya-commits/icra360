@@ -1,0 +1,108 @@
+name: icra360
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: icra360-postgres
+    environment:
+      POSTGRES_DB: icra360
+      POSTGRES_USER: icra360
+      POSTGRES_PASSWORD: icra360_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - icra360_pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/01-app-role.sql:/docker-entrypoint-initdb.d/01-app-role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U icra360 -d icra360"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: icra360-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - icra360_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: icra360-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: icra360_minio
+      MINIO_ROOT_PASSWORD: icra360_minio_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - icra360_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: icra360-minio-init
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 icra360_minio icra360_minio_secret;
+      mc mb --ignore-existing local/icra360-local;
+      exit 0;
+      "
+
+  web:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://icra360_app:icra360_app_dev@postgres:5432/icra360?schema=public
+      AUTH_SECRET: replace-with-32+-char-random-string
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      NATIONAL_ID_HMAC_PEPPER: replace-with-long-random-pepper
+      MAIL_FROM_NAME: İcra360
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://icra360_app:icra360_app_dev@postgres:5432/icra360?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  icra360_pg_data:
+  icra360_redis_data:
+  icra360_minio_data:

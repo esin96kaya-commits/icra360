@@ -1,0 +1,24 @@
+{
+  "name": "icra360",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:unit": "turbo test --filter=@icra360/crypto --filter=@icra360/domain --filter=@icra360/contracts",
+    "db:generate": "pnpm --filter @icra360/db generate",
+    "db:migrate": "pnpm --filter @icra360/db migrate",
+    "db:seed": "pnpm --filter @icra360/db seed",
+    "db:studio": "pnpm --filter @icra360/db studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}

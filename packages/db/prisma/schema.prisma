@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_MIGRATE_URL")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  TERMINATED
+}
+
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String       @unique
+  name      String
+  status    TenantStatus @default(ACTIVE)
+  settings  Json         @default("{}")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz
+  version   Int          @default(1)
+
+  companies Company[]
+  users     User[]
+  roles     Role[]
+  employees Employee[]
+  auditLogs AuditLog[]
+
+  @@map("tenants")
+}
+
+model Company {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  legalName   String    @map("legal_name")
+  tradeName   String?   @map("trade_name")
+  taxNumber   String    @map("tax_number")
+  taxOffice   String?   @map("tax_office")
+  address     String?
+  phone       String?
+  email       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+  version     Int       @default(1)
+
+  workplaces  Workplace[]
+  employments Employment[]
+  userRoles   UserRole[]
+
+  @@unique([tenantId, taxNumber])
+  @@index([tenantId])
+  @@map("companies")
+}
+
+model Workplace {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  company            Company   @relation(fields: [companyId], references: [id])
+  name               String
+  address            String?
+  registrationNumber String?   @map("registration_number")
+  sgkNumber          String?   @map("sgk_number")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz
+  version            Int       @default(1)
+
+  employments Employment[]
+  userRoles   UserRole[]
+
+  @@index([tenantId, companyId])
+  @@map("workplaces")
+}
+
+model User {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  email        String
+  passwordHash String     @map("password_hash")
+  name         String
+  status       UserStatus @default(INVITED)
+  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz
+  version      Int        @default(1)
+
+  roles UserRole[]
+
+  @@unique([tenantId, email])
+  @@index([email])
+  @@map("users")
+}
+
+model Permission {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String @unique
+  description String
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  code      String
+  name      String
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  roleId      String     @map("role_id") @db.Uuid
+  companyId   String?    @map("company_id") @db.Uuid
+  workplaceId String?    @map("workplace_id") @db.Uuid
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  company     Company?   @relation(fields: [companyId], references: [id])
+  workplace   Workplace? @relation(fields: [workplaceId], references: [id])
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Employee {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  employeeNumber  String?   @map("employee_number")
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  nationalIdEnc   Bytes     @map("national_id_enc")
+  nationalIdNonce Bytes     @map("national_id_nonce")
+  nationalIdHmac  Bytes     @map("national_id_hmac")
+  keyVersion      Int       @default(1) @map("key_version")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  version         Int       @default(1)
+
+  employments Employment[]
+
+  @@unique([tenantId, nationalIdHmac])
+  @@index([tenantId, lastName, firstName])
+  @@index([tenantId, employeeNumber])
+  @@map("employees")
+}
+
+model Employment {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  employeeId      String           @map("employee_id") @db.Uuid
+  employee        Employee         @relation(fields: [employeeId], references: [id])
+  companyId       String           @map("company_id") @db.Uuid
+  company         Company          @relation(fields: [companyId], references: [id])
+  workplaceId     String?          @map("workplace_id") @db.Uuid
+  workplace       Workplace?       @relation(fields: [workplaceId], references: [id])
+  jobTitle        String?          @map("job_title")
+  status          EmploymentStatus @default(ACTIVE)
+  startDate       DateTime         @map("start_date") @db.Date
+  endDate         DateTime?        @map("end_date") @db.Date
+  terminationCode String?          @map("termination_code")
+  netSalary       Decimal?         @map("net_salary") @db.Decimal(19, 4)
+  currency        String           @default("TRY")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz
+  version         Int              @default(1)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, companyId, status])
+  @@map("employments")
+}
+
+model AuditLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String?  @map("tenant_id") @db.Uuid
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+  actorId      String?  @map("actor_id") @db.Uuid
+  action       String
+  entityType   String   @map("entity_type")
+  entityId     String?  @map("entity_id")
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  beforeDigest String?  @map("before_digest")
+  afterDigest  String?  @map("after_digest")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
